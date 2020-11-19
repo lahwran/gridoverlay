@@ -5,28 +5,68 @@ using System.Text;
 using GameOverlay.Drawing;
 using GameOverlay.Windows;
 
+using System.Windows.Forms;
+
 namespace Examples
 {
 	public class Example : IDisposable
 	{
+		
+		private const int FontSize = 24;
+		private const float StrokeOpacity = 0.025f;
+		private const float SecondaryStrokeOpacity = 0.02f;
+		private const float TextOpacity = 0.25f;
+		private const float BackgroundOpacity = 0.0f;
+		private const int GridSize = 4;
+		private const int CellSize = 16;
+		private const float cellWidth = CellSize*GridSize;
+		private const float cellHeight = CellSize*GridSize;
+		private const int StrokeSize = 3;
+		private const int SecondaryStrokeSize = 2;
+		//private const string FontFamilyName = "bahnschrift";
+		private const string FontFamilyName = "bahnschrift";
+		//private const string FontFamilyName = "impact";
+		//private const string FontFamilyName = "ink free";
+		//private const string FontFamilyName = "sitka";
+		
+		//private const string FontFamilyName = "cascadia mono";
+		//private const string FontFamilyName = "corbel";
 		private readonly GraphicsWindow _window;
 
 		private readonly Dictionary<string, SolidBrush> _brushes;
 		private readonly Dictionary<string, Font> _fonts;
 		private readonly Dictionary<string, Image> _images;
+		
+		private Font gridNumberFont;
 
-		private Geometry _gridGeometry;
-		private Rectangle _gridBounds;
+		private SolidBrush lineBrush;
+		private SolidBrush secondaryLineBrush;        
+		private SolidBrush backgroundBrush;
+		private SolidBrush textXBrush;
+		private SolidBrush textYBrush;
+		private SolidBrush textXBrushShadow;
+		private SolidBrush textYBrushShadow;
+		private SolidBrush textCommaBrush;
 
-		private Random _random;
-		private long _lastRandomSet;
-		private List<Action<Graphics, float, float>> _randomFigures;
+		
+		private Geometry bigGridGeometry;
+		private Geometry smallGridGeometry;
+
+		private Point[] numberPositionsY;
+		private Point[] numberPositionsX;
+		private String[] labelsY;
+		private String[] labelsX;
+		private float screenWidth;
+		private float screenHeight;
+		
+		private System.Drawing.Rectangle gridBounds;
 
 		public Example()
 		{
 			_brushes = new Dictionary<string, SolidBrush>();
 			_fonts = new Dictionary<string, Font>();
 			_images = new Dictionary<string, Image>();
+			this.gridBounds = Screen.PrimaryScreen.Bounds;
 
 			var gfx = new Graphics()
 			{
@@ -37,9 +77,13 @@ namespace Examples
 
 			_window = new GraphicsWindow(0, 0, 800, 600, gfx)
 			{
-				FPS = 60,
+				FPS = 1,
 				IsTopmost = true,
-				IsVisible = true
+				IsVisible = true,
+				X = 0,
+				Y = 0,
+				Width = this.gridBounds.Width,
+				Height = this.gridBounds.Height
 			};
 
 			_window.DestroyGraphics += _window_DestroyGraphics;
@@ -49,7 +93,7 @@ namespace Examples
 
 		private void _window_SetupGraphics(object sender, SetupGraphicsEventArgs e)
 		{
-			var gfx = e.Graphics;
+			var g = e.Graphics;
 
 			if (e.RecreateResources)
 			{
@@ -57,54 +101,117 @@ namespace Examples
 				foreach (var pair in _images) pair.Value.Dispose();
 			}
 
-			_brushes["black"] = gfx.CreateSolidBrush(0, 0, 0);
-			_brushes["white"] = gfx.CreateSolidBrush(255, 255, 255);
-			_brushes["red"] = gfx.CreateSolidBrush(255, 0, 0);
-			_brushes["green"] = gfx.CreateSolidBrush(0, 255, 0);
-			_brushes["blue"] = gfx.CreateSolidBrush(0, 0, 255);
-			_brushes["background"] = gfx.CreateSolidBrush(0x33, 0x36, 0x3F);
-			_brushes["grid"] = gfx.CreateSolidBrush(255, 255, 255, 0.2f);
-			_brushes["random"] = gfx.CreateSolidBrush(0, 0, 0);
+			_brushes["black"] = g.CreateSolidBrush(0, 0, 0);
+			_brushes["white"] = g.CreateSolidBrush(255, 255, 255);
+			_brushes["red"] = g.CreateSolidBrush(255, 0, 0);
+			_brushes["green"] = g.CreateSolidBrush(0, 255, 0);
+			_brushes["blue"] = g.CreateSolidBrush(0, 0, 255);
+			_brushes["background"] = g.CreateSolidBrush(0x33, 0x36, 0x3F);
+			_brushes["grid"] = g.CreateSolidBrush(255, 255, 255, 0.2f);
+			
+			_brushes["transparent"] = g.CreateSolidBrush(0, 0, 0, 0);
 
 			if (e.RecreateResources) return;
 
-			_fonts["arial"] = gfx.CreateFont("Arial", 12);
-			_fonts["consolas"] = gfx.CreateFont("Consolas", 14);
+			_fonts["arial"] = g.CreateFont("Arial", 12);
+			_fonts["consolas"] = g.CreateFont("Consolas", 14);
 
-			_gridBounds = new Rectangle(20, 60, gfx.Width - 20, gfx.Height - 20);
-			_gridGeometry = gfx.CreateGeometry();
+			//gridBounds = new Rectangle(20, 60, g.Width - 20, g.Height - 20);
+            screenWidth = gridBounds.Width;
+            screenHeight = gridBounds.Height;
+			int numGridColumns = (int)Math.Ceiling(screenWidth / cellWidth);
+			int numGridRows = (int)Math.Ceiling(screenHeight / cellHeight);
+            numberPositionsX = new Point[numGridColumns * numGridRows];
+            numberPositionsY = new Point[numGridColumns * numGridRows];
+            labelsX = new String[numGridColumns * numGridRows];
+            labelsY = new String[numGridColumns * numGridRows];
+            
+            
+            gridNumberFont = g.CreateFont(FontFamilyName, FontSize);
 
-			for (float x = _gridBounds.Left; x <= _gridBounds.Right; x += 20)
-			{
-				var line = new Line(x, _gridBounds.Top, x, _gridBounds.Bottom);
-				_gridGeometry.BeginFigure(line);
-				_gridGeometry.EndFigure(false);
-			}
+            int rc = 50;
+            int gc = 255;
+            int bc = 50;
+            int rd = 0;
+            int gd = 0;
+            int bd = 0;
+            lineBrush = g.CreateSolidBrush(rc, gc, bc, StrokeOpacity);
+            secondaryLineBrush = g.CreateSolidBrush(rc, gc, bc, SecondaryStrokeOpacity);
+            textXBrush = g.CreateSolidBrush(rc, gc, bc, TextOpacity);
+            textYBrush = g.CreateSolidBrush(gc, rc, gc, TextOpacity);
+            textXBrushShadow = g.CreateSolidBrush(bd, bd, bd, TextOpacity);
+            textYBrushShadow = g.CreateSolidBrush(bd, bd, bd, TextOpacity);
+            textCommaBrush = g.CreateSolidBrush(rc, gc, bc, TextOpacity);
+            backgroundBrush = g.CreateSolidBrush(1, 1, 1, BackgroundOpacity);
 
-			for (float y = _gridBounds.Top; y <= _gridBounds.Bottom; y += 20)
-			{
-				var line = new Line(_gridBounds.Left, y, _gridBounds.Right, y);
-				_gridGeometry.BeginFigure(line);
-				_gridGeometry.EndFigure(false);
-			}
+            bigGridGeometry = g.CreateGeometry();
+            for (int x = 0; x < numGridColumns; x++)
+            {
+                float startX = x * cellWidth;
+                float startY = 0;
+                float endX = startX;
+                float endY = screenHeight;
+                bigGridGeometry.BeginFigure(new Point(startX, startY));
+                bigGridGeometry.AddPoint(new Point(endX, endY));
+                bigGridGeometry.EndFigure(false);
+            }
 
-			_gridGeometry.Close();
+            for (int y = 0; y < numGridRows; y++)
+            {
+                float startX = 0;
+                float startY = y * cellHeight;
+                float endX = screenWidth;
+                float endY = startY;
+                bigGridGeometry.BeginFigure(new Point(startX, startY));
+                bigGridGeometry.AddPoint(new Point(endX, endY));
+                bigGridGeometry.EndFigure(false);
+            }
+            bigGridGeometry.Close();
 
-			_randomFigures = new List<Action<Graphics, float, float>>()
-			{
-				(g, x, y) => g.DrawRectangle(GetRandomColor(), x + 10, y + 10, x + 110, y + 110, 2.0f),
-				(g, x, y) => g.DrawCircle(GetRandomColor(), x + 60, y + 60, 48, 2.0f),
-				(g, x, y) => g.DrawRoundedRectangle(GetRandomColor(), x + 10, y + 10, x + 110, y + 110, 8.0f, 2.0f),
-				(g, x, y) => g.DrawTriangle(GetRandomColor(), x + 10, y + 110, x + 110, y + 110, x + 60, y + 10, 2.0f),
-				(g, x, y) => g.DashedRectangle(GetRandomColor(), x + 10, y + 10, x + 110, y + 110, 2.0f),
-				(g, x, y) => g.DashedCircle(GetRandomColor(), x + 60, y + 60, 48, 2.0f),
-				(g, x, y) => g.DashedRoundedRectangle(GetRandomColor(), x + 10, y + 10, x + 110, y + 110, 8.0f, 2.0f),
-				(g, x, y) => g.DashedTriangle(GetRandomColor(), x + 10, y + 110, x + 110, y + 110, x + 60, y + 10, 2.0f),
-				(g, x, y) => g.FillRectangle(GetRandomColor(), x + 10, y + 10, x + 110, y + 110),
-				(g, x, y) => g.FillCircle(GetRandomColor(), x + 60, y + 60, 48),
-				(g, x, y) => g.FillRoundedRectangle(GetRandomColor(), x + 10, y + 10, x + 110, y + 110, 8.0f),
-				(g, x, y) => g.FillTriangle(GetRandomColor(), x + 10, y + 110, x + 110, y + 110, x + 60, y + 10),
-			};
+            smallGridGeometry = g.CreateGeometry();
+            float digitWidth = FontSize * 4 / 7f;
+            float digitHeight = FontSize;
+            float offsetY = -digitHeight / 2f;
+            for (int x = 0; x < numGridColumns; x++)
+            {
+                for (int y = 0; y < numGridRows; y++)
+                {
+                    int gridNumber = (y * numGridColumns) + x;                    
+                    labelsX[gridNumber] = (x.ToString()) +",";
+                    labelsY[gridNumber] = y.ToString();
+                    float numberOfDigits = x.ToString().Length + 0.1f;                    
+                    float offsetX = -digitWidth * numberOfDigits;                    
+                    float positionX_X = x * cellWidth + cellWidth / 2f + offsetX;
+                    float positionX_Y = x * cellWidth + cellWidth / 2f + digitWidth*0.1f;
+                    float positionY = y * cellHeight + cellHeight / 2f + offsetY;
+
+                    numberPositionsX[gridNumber] = new Point(positionX_X, positionY);
+                    numberPositionsY[gridNumber] = new Point(positionX_Y, positionY);
+
+                    for (int i = 1; i < GridSize; i++)
+                    {
+                        float startX = x * cellWidth + i * cellWidth / GridSize;
+                        float startY = y * cellHeight;
+                        float endX = startX;
+                        float endY = startY + cellHeight;
+                        smallGridGeometry.BeginFigure(new Point(startX, startY));
+                        smallGridGeometry.AddPoint(new Point(endX, endY));
+                        smallGridGeometry.EndFigure();
+                    }
+
+                    for (int j = 1; j < GridSize; j++)
+                    {
+                        float startX = x * cellWidth;
+                        float startY = y * cellHeight + j * cellHeight / GridSize;
+                        float endX = startX + cellWidth;
+                        float endY = startY;
+                        smallGridGeometry.BeginFigure(new Point(startX, startY));
+                        smallGridGeometry.AddPoint(new Point(endX, endY));
+                        smallGridGeometry.EndFigure();
+                    }
+                }
+            }
+            smallGridGeometry.Close();
 		}
 
 		private void _window_DestroyGraphics(object sender, DestroyGraphicsEventArgs e)
@@ -116,54 +223,25 @@ namespace Examples
 
 		private void _window_DrawGraphics(object sender, DrawGraphicsEventArgs e)
 		{
-			var gfx = e.Graphics;
+			var g = e.Graphics;
 
 			var padding = 16;
-			var infoText = new StringBuilder()
-				.Append("FPS: ").Append(gfx.FPS.ToString().PadRight(padding))
-				.Append("FrameTime: ").Append(e.FrameTime.ToString().PadRight(padding))
-				.Append("FrameCount: ").Append(e.FrameCount.ToString().PadRight(padding))
-				.Append("DeltaTime: ").Append(e.DeltaTime.ToString().PadRight(padding))
-				.ToString();
 
-			gfx.ClearScene(_brushes["background"]);
+			g.ClearScene(_brushes["transparent"]);
 
-			gfx.DrawTextWithBackground(_fonts["consolas"], _brushes["green"], _brushes["black"], 20, 20, infoText);
+			//g.FillRectangle(_brushes["transparent"], 0, 0, screenWidth, screenHeight);            
 
-			gfx.DrawGeometry(_gridGeometry, _brushes["grid"], 1.0f);
+			g.DrawGeometry(bigGridGeometry, lineBrush, StrokeSize);
+			g.DrawGeometry(smallGridGeometry, secondaryLineBrush, SecondaryStrokeSize);
 
-			if (_lastRandomSet == 0L || e.FrameTime - _lastRandomSet > 2500)
-			{
-				_lastRandomSet = e.FrameTime;
-			}
-
-			_random = new Random(unchecked((int)_lastRandomSet));
-
-			for (float row = _gridBounds.Top + 12; row < _gridBounds.Bottom - 120; row += 120)
-			{
-				for (float column = _gridBounds.Left + 12; column < _gridBounds.Right - 120; column += 120)
-				{
-					DrawRandomFigure(gfx, column, row);
-				}
+			for (int i = 0; i < numberPositionsX.Length; i++) {
+				g.DrawText(gridNumberFont, textXBrush, numberPositionsX[i].X, numberPositionsX[i].Y, labelsX[i]);
+				g.DrawText(gridNumberFont, textYBrush, numberPositionsY[i].X, numberPositionsY[i].Y, labelsY[i]);
+				//g.DrawText(gridNumberFont, textXBrushShadow, numberPositionsX[i].X+4, numberPositionsX[i].Y, labelsX[i]);
+				//g.DrawText(gridNumberFont, textYBrushShadow, numberPositionsY[i].X, numberPositionsY[i].Y+4, labelsY[i]);
 			}
 		}
-
-		private void DrawRandomFigure(Graphics gfx, float x, float y)
-		{
-			var action = _randomFigures[_random.Next(0, _randomFigures.Count)];
-
-			action(gfx, x, y);
-		}
-
-		private SolidBrush GetRandomColor()
-		{
-			var brush = _brushes["random"];
-
-			brush.Color = new Color(_random.Next(0, 256), _random.Next(0, 256), _random.Next(0, 256));
-
-			return brush;
-		}
-
+		
 		public void Run()
 		{
 			_window.Create();
@@ -172,6 +250,12 @@ namespace Examples
 
 		~Example()
 		{
+			gridNumberFont.Dispose();
+			bigGridGeometry.Dispose();
+			smallGridGeometry.Dispose();
+			lineBrush.Dispose();
+			secondaryLineBrush.Dispose();
+			backgroundBrush.Dispose();
 			Dispose(false);
 		}
 
