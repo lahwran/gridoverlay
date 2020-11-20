@@ -12,10 +12,11 @@ namespace Examples
 	public class Example : IDisposable
 	{
 		
-		private const int FontSize = 24;
+		private const int FontSize = 20;
 		private const float StrokeOpacity = 0.025f;
 		private const float SecondaryStrokeOpacity = 0.02f;
 		private const float TextOpacity = 0.25f;
+		private const float TextOpacity2 = 0.10f;
 		private const float BackgroundOpacity = 0.0f;
 		private const int GridSize = 4;
 		private const int CellSize = 16;
@@ -24,12 +25,15 @@ namespace Examples
 		private const int StrokeSize = 3;
 		private const int SecondaryStrokeSize = 2;
 		//private const string FontFamilyName = "bahnschrift";
-		private const string FontFamilyName = "bahnschrift";
+		//private const string FontFamilyName = "bahnschrift";
 		//private const string FontFamilyName = "impact";
 		//private const string FontFamilyName = "ink free";
 		//private const string FontFamilyName = "sitka";
 		
 		//private const string FontFamilyName = "cascadia mono";
+		//private const string FontFamilyName = "consolas";
+		//private const string FontFamilyName = "lucida console";
+		private const string FontFamilyName = "cascadia code";
 		//private const string FontFamilyName = "corbel";
 		private readonly GraphicsWindow _window;
 
@@ -52,6 +56,8 @@ namespace Examples
 		private Geometry bigGridGeometry;
 		private Geometry smallGridGeometry;
 
+		private SolidBrush[] numberColorsX;
+		private SolidBrush[] numberColorsY;
 		private Point[] numberPositionsY;
 		private Point[] numberPositionsX;
 		private String[] labelsY;
@@ -123,6 +129,8 @@ namespace Examples
 			int numGridRows = (int)Math.Ceiling(screenHeight / cellHeight);
             numberPositionsX = new Point[numGridColumns * numGridRows];
             numberPositionsY = new Point[numGridColumns * numGridRows];
+            numberColorsX = new SolidBrush[numGridColumns * numGridRows];
+            numberColorsY = new SolidBrush[numGridColumns * numGridRows];
             labelsX = new String[numGridColumns * numGridRows];
             labelsY = new String[numGridColumns * numGridRows];
             
@@ -139,9 +147,9 @@ namespace Examples
             secondaryLineBrush = g.CreateSolidBrush(rc, gc, bc, SecondaryStrokeOpacity);
             textXBrush = g.CreateSolidBrush(rc, gc, bc, TextOpacity);
             textYBrush = g.CreateSolidBrush(gc, rc, gc, TextOpacity);
-            textXBrushShadow = g.CreateSolidBrush(bd, bd, bd, TextOpacity);
-            textYBrushShadow = g.CreateSolidBrush(bd, bd, bd, TextOpacity);
-            textCommaBrush = g.CreateSolidBrush(rc, gc, bc, TextOpacity);
+            textXBrushShadow = g.CreateSolidBrush(128,128,128,TextOpacity2);
+            textYBrushShadow = g.CreateSolidBrush(128,128,128,TextOpacity2);
+            textCommaBrush = g.CreateSolidBrush(rc, gc, bc, TextOpacity2);
             backgroundBrush = g.CreateSolidBrush(1, 1, 1, BackgroundOpacity);
 
             bigGridGeometry = g.CreateGeometry();
@@ -177,16 +185,21 @@ namespace Examples
                 for (int y = 0; y < numGridRows; y++)
                 {
                     int gridNumber = (y * numGridColumns) + x;                    
-                    labelsX[gridNumber] = (x.ToString()) +",";
-                    labelsY[gridNumber] = y.ToString();
-                    float numberOfDigits = x.ToString().Length + 0.1f;                    
-                    float offsetX = -digitWidth * numberOfDigits;                    
-                    float positionX_X = x * cellWidth + cellWidth / 2f + offsetX;
-                    float positionX_Y = x * cellWidth + cellWidth / 2f + digitWidth*0.1f;
-                    float positionY = y * cellHeight + cellHeight / 2f + offsetY;
+                    labelsX[gridNumber] = "⮞" + (x.ToString());
+                    labelsY[gridNumber] = "⮟" + y.ToString();
+                    float numberOfDigitsX = labelsX[gridNumber].Length;                    
+                    float numberOfDigitsY = labelsY[gridNumber].Length;                    
+                    float offsetX_X = -digitWidth * numberOfDigitsX/2f;
+                    float offsetX_Y = -digitWidth * numberOfDigitsY/2f;
+                    float positionX_X = x * cellWidth + cellWidth / 2f + offsetX_X;
+                    float positionX_Y = x * cellWidth + cellWidth / 2f + offsetX_Y;
+                    float positionY_X = y * cellHeight + cellHeight / 2f - digitHeight;
+                    float positionY_Y = y * cellHeight + cellHeight / 2f ;
 
-                    numberPositionsX[gridNumber] = new Point(positionX_X, positionY);
-                    numberPositionsY[gridNumber] = new Point(positionX_Y, positionY);
+                    numberColorsX[gridNumber] = x % 2 == 0 ? textXBrush : textXBrushShadow;
+                    numberColorsY[gridNumber] = y % 2 == 0 ? textYBrush : textYBrushShadow;
+                    numberPositionsX[gridNumber] = new Point(positionX_X, positionY_X);
+                    numberPositionsY[gridNumber] = new Point(positionX_Y, positionY_Y);
 
                     for (int i = 1; i < GridSize; i++)
                     {
@@ -235,8 +248,8 @@ namespace Examples
 			g.DrawGeometry(smallGridGeometry, secondaryLineBrush, SecondaryStrokeSize);
 
 			for (int i = 0; i < numberPositionsX.Length; i++) {
-				g.DrawText(gridNumberFont, textXBrush, numberPositionsX[i].X, numberPositionsX[i].Y, labelsX[i]);
-				g.DrawText(gridNumberFont, textYBrush, numberPositionsY[i].X, numberPositionsY[i].Y, labelsY[i]);
+				g.DrawText(gridNumberFont, numberColorsX[i], numberPositionsX[i].X, numberPositionsX[i].Y, labelsX[i]);
+				g.DrawText(gridNumberFont, numberColorsY[i], numberPositionsY[i].X, numberPositionsY[i].Y, labelsY[i]);
 				//g.DrawText(gridNumberFont, textXBrushShadow, numberPositionsX[i].X+4, numberPositionsX[i].Y, labelsX[i]);
 				//g.DrawText(gridNumberFont, textYBrushShadow, numberPositionsY[i].X, numberPositionsY[i].Y+4, labelsY[i]);
 			}
